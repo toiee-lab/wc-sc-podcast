@@ -3,7 +3,7 @@
 Plugin Name: WooCommerce SoundCloud to Podast
 Plugin URI: https://toiee.jp
 Description: WooCommerce の Product, Member, Subscription と連動して動作するSoundCloud をPodcast にするためのプラグイン
-Version: 0.2
+Version: 0.2.1
 Author: toiee Lab
 Author URI: https://toiee.jp
 License: GPL2
@@ -510,7 +510,7 @@ EOD;
 			$pro_ids = explode(',', $wc_param['wcscp_product_ids']);
 			foreach($pro_ids as $i)
 			{
-				$access = wc_customer_bought_product( $email, $uid, $i );
+				$access = ($i != '') ? wc_customer_bought_product( $email, $uid, $i ) : false;
 				if($access){
 					output_podcast( $casttype, $email, $registered_date);
 					exit;
@@ -525,7 +525,7 @@ EOD;
 
 				foreach( $sub_ids as $i )
 				{
-					$access = wcs_user_has_subscription( $uid, $i, 'active');
+					$access = ($i != '') ? wcs_user_has_subscription( $uid, $i, 'active') : false;
 					if( $access ){
 						output_podcast( $casttype, $email, $registered_date);
 						exit;
