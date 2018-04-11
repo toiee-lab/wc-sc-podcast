@@ -3,7 +3,7 @@
 Plugin Name: WooCommerce SoundCloud to Podast
 Plugin URI: https://toiee.jp
 Description: WooCommerce の Product, Member, Subscription と連動して動作するSoundCloud をPodcast にするためのプラグイン
-Version: 0.1
+Version: 0.2
 Author: toiee Lab
 Author URI: https://toiee.jp
 License: GPL2
@@ -84,22 +84,28 @@ class WC_SC_Podcast
 	//------------------- shortcode
 	function add_scpodcast_shortcode($atts)
 	{
-		//! TODO : WooCommerce のパラメータを使って、動作するように設定する
-		// - id="x,y,z" に対応させる
-		// - sub_id="x,y,z" に対応させる
-		// - mem_id="x,y,z" に対応させる
+		$atts = shortcode_atts( array(
+			'id' => '',
+			'pro_id' => '',
+			'sub_id' => '',
+			'mem_id' => '',
+			'type'   => 'url'
+		), $atts );
 		
 		if( isset($atts['id']) && is_numeric($atts['id']) )
 		{
 			$uid	= get_current_user_id();
 			$embed  = get_post_meta($atts['id'], 'wcscp_embedtag', true);
+			
+			$atts['usr_id'] = $uid;
 
+			$atts_str = serialize( $atts );
 			
 			if($uid == 0){
 				$token = '';
 			}
 			else{
-				$token = $this->xor_encrypt("toiee,{$uid},lab,{$atts['id']}", NONCE_KEY);
+				$token = $this->xor_encrypt( $atts_str, NONCE_KEY );
 			}
 			
 			$type = isset( $atts['type'] ) ? $atts['type'] : '';
@@ -115,7 +121,8 @@ class WC_SC_Podcast
 				case  'link':
 					return '<p><a href="'.$url.'" target="_blank">'.$url.'</a></p>';
 				default:
-					return $embed;
+					return 'null';
+//					return $embed;
 				
 			}
 		}
@@ -153,7 +160,7 @@ class WC_SC_Podcast
 	*/
 	function register_meta_boxes()
 	{
-		add_meta_box('wc_scp', 'RCP SoundCloud Playlist to Podcast', array($this, 'display_embedtag_meta_box'), 'scpcast', 'advanced' );
+		add_meta_box('wc_scp', 'WC SoundCloud Playlist to Podcast', array($this, 'display_embedtag_meta_box'), 'scpcast', 'advanced' );
 		
 		
 	}
@@ -184,13 +191,41 @@ class WC_SC_Podcast
 			'latest'   => '最新のみ',
 		);
 		
+		// WooCommerce の制限情報（プロダクトID、サブスクリプションID、メンバーシップID）
+		$wc_param = array('wcscp_product_ids'=>array(), 'wcscp_sub_ids'=>array(), 'wcscp_mem_ids'=>array());
+
+		$wc_param_data = get_post_meta($id, 'wcscp_param', true);
+		if( $wc_param_data != '' ){
+			$wc_param_arr = unserialize( $wc_param_data );
+			
+			foreach($wc_param_arr as $key => $v)
+			{
+				$wc_param[$key] = implode(',', $v);
+			}
+		}
+		
 		wp_nonce_field( 'embedtag_meta_box', 'embedtag_meta_box_nonce' );
 
 		echo <<<EOD
-
+<p><b>閲覧制限</b></p>
+<p>コンマ区切りで複数記入できます</p>
+<table>
+	<tr>
+		<th><label>Product IDs</label></th>
+		<td><input type="text" name="wcscp_product_ids" value="{$wc_param['wcscp_product_ids']}" /></td>
+	</tr>
+	<tr>
+		<th><label>Subscription IDs</label></th>
+		<td><input type="text" name="wcscp_sub_ids" value="{$wc_param['wcscp_sub_ids']}" /></td>
+	</tr>
+	<tr>
+		<th><label>Membership IDs</label></th>
+		<td><input type="text" name="wcscp_mem_ids" value="{$wc_param['wcscp_mem_ids']}" /></td>
+	</tr>
+</table>
 <p><b>Embed code</b></p>
-<p>SoundCloudのプレイリストのEmbed code を貼り付けてください。自動で、iframeだけを保存します。</p>
-<textarea name="wcscp_embedtag" style="width:100%">
+<p>SoundCloudのプレイリストのEmbed code (リンクではなく、iframeタグです)を貼り付けてください。<a href="https://github.com/toiee-lab/wc-sc-podcast/raw/master/embed.png" target="_blank">(詳細はこちら)</a></p>
+<textarea name="wcscp_embedtag" style="width:100%;border:2px solid #666;height:5em;">
 {$embed}
 </textarea>
 
@@ -265,6 +300,17 @@ EOD;
 		$freetype = isset($_POST['wcscp_freetype']) ? $_POST['wcscp_freetype'] : 'nolisten';
 		update_post_meta($post_id, 'wcscp_freetype', $freetype);
 		
+		// product_ids, sub_ids, mem_ids を保存する
+		$wc_param = array();
+		foreach( array('product', 'sub', 'mem') as $name )
+		{
+			$vname = 'wcscp_'.$name.'_ids';
+			if( isset( $_POST[$vname]) )
+			{
+				$wc_param[$vname] = explode(',', $_POST[$vname]);
+			}
+		}
+		update_post_meta( $post_id, 'wcscp_param', serialize($wc_param) );
 	}
 
 	
@@ -285,7 +331,7 @@ EOD;
         //   $position  : メニューの位置 ( 1 や 99 など )
  
         // 設定のサブメニューとしてメニューを追加する場合は下記のような形にします。
-        add_options_page( 'RCP SCPodcast', 'RCP SCPodcast', 'manage_options', 'wcscp_setting', array( $this, 'create_admin_page' ) );
+        add_options_page( 'WC SCPodcast', 'WC SCPodcast', 'manage_options', 'wcscp_setting', array( $this, 'create_admin_page' ) );
     }
 	
 	
@@ -421,20 +467,24 @@ EOD;
 		{
 			require_once dirname(__FILE__).'/sc2podcast.php';
 			
+			$str = $this->xor_decrypt($_GET['token'], NONCE_KEY);			
+			$atts = unserialize($str);
 			
-			//! TODO : URLからPodcastの制御を行う
-			// 表示する、しないなどを制御する
-			$str = $this->xor_decrypt($_GET['token'], NONCE_KEY);
+			if( !isset($atts['id']) ){   // id がなければ、動作させない
+				echo "Error: invalid token";
+				exit;
+			}
 			
-			$arr = explode(',', $str);
-			$uid = $arr[1];
-			$pid = $arr[3];
+			$uid = $atts['usr_id'];  // user id
+			$pid = $atts['id'];      // scpodcast post_id
 
 			$embed    = get_post_meta($pid, 'wcscp_embedtag', true);
 			$casttype = get_post_meta($pid, 'wcscp_casttype', true);
 			$freetype = get_post_meta($pid, 'wcscp_freetype', true);
 			
-			$user = get_userdata($uid);					
+			$wc_param = unserialize( get_post_meta($pid, 'wcscp_param', true) );
+			
+			$user = get_userdata( $uid );
 			$email = $user->data->user_email;
 			$registered_date = strtotime( $user->data->user_registered );
 			
@@ -443,66 +493,100 @@ EOD;
 			$base_url = site_url().'/wp-content/uploads/sc2podcast/';
 
 			$sc2p = new SC2Podcast($cid, $embed, $base_url);			
-						
-			// RCP があるなら
-			if( function_exists('rcp_user_can_access') )
-			{
-				if( rcp_user_can_access($uid, $pid) )
-				{
-					
-					switch( $casttype )
-					{
-						case 'audio-seminar' :
-							$sc2p->output_as_audioseminar($email);
-							break;
-						case 'podcast' :
-							$sc2p->output($email);
-							break;
-						case 'campaign' :
-							$sc2p->output_as_campaign($email, $registered_date);
-//							$sc2p->output_as_campaign($email, time() );   //for test
-							break;
-						default:
-							header("Content-Type:text/plain; charset=utf-8");
-							echo "L446 : pass rcp_user_can_access({$uid}, {$pid}) \n";
-							exit;
-					}
-				}
-				else
-				{
-					switch( $freetype )
-					{
-						case 'nolisten':
-							//オーディオのURLを全部書き換えるようにする
-							$sc2p->output_as_free_nolisten($email, $casttype);
-							break;
-						
-						case 'latest':
-							//常に最新話のオーディオ以外のURLを書き換える
-							$sc2p->output_as_free_listen($email, $casttype);
-							break;
-							
-						default:
-							header("Content-Type:text/plain; charset=utf-8");
-							echo "L463 : not access rcp_user_can_access({$uid}, {$pid}) \n";
-							var_dump($casttype, $freetype);
-							exit;
-					}
-					
-				}
-				
+
+
+			// WooCommerce でチェックする
+			$has_access = false;  // Access許可
+			
+			// Super user の場合は出力する
+			if( is_super_admin() ){
+				output_podcast( $casttype, $email, $registered_date);
+				exit;
 			}
-			else
+			
+			$wc_param = false;
+			
+			// 商品でチェックする
+			$pro_ids = explode(',', $wc_param['wcscp_product_ids']);
+			foreach($pro_ids as $i)
 			{
-				//普通にPodcast を配信するかなー
-				
+				$access = wc_customer_bought_product( $email, $uid, $i );
+				if($access){
+					output_podcast( $casttype, $email, $registered_date);
+					exit;
+				}
 			}
 			
 			
-			
-			
-			
-			exit;
+			// Subscription でチェックをする 
+			if ( function_exists('wcs_user_has_subscription') )
+			{
+				$sub_ids = explode(',', $wc_param['wcscp_sub_ids']);
+
+				foreach( $sub_ids as $i )
+				{
+					$access = wcs_user_has_subscription( $uid, $i, 'active');
+					if( $access ){
+						output_podcast( $casttype, $email, $registered_date);
+						exit;
+					}
+				}
+			}
+
+			// Membership でチェックする
+			if ( function_exists( 'wc_memberships' ) )
+			{
+				$mem_ids = explode(',', $wc_param['wcscp_mem_ids']);
+				
+				foreach( $mem_ids as $i )
+				{
+					$access = wc_memberships_is_user_active_member(  $uid, $i );
+					if( $access ){
+						output_podcast( $casttype, $email, $registered_date);
+						exit;						
+					}
+				}
+			}
+						
+			// アクセス権がない場合
+			switch( $freetype )
+			{
+				case 'nolisten':
+					//オーディオのURLを全部書き換えるようにする
+					$sc2p->output_as_free_nolisten($email, $casttype);
+					exit;
+				
+				case 'latest':
+					//常に最新話のオーディオ以外のURLを書き換える
+					$sc2p->output_as_free_listen($email, $casttype);
+					exit;
+					
+				default:
+					header("Content-Type:text/plain; charset=utf-8");
+					echo "L463 : not access rcp_user_can_access({$uid}, {$pid}) \n";
+					var_dump($casttype, $freetype);
+					exit;
+			}
+		}
+	}
+	
+	function output_podcast( $casttype, $email, $registered_date)
+	{
+		switch( $casttype )
+		{
+			case 'audio-seminar' :
+				$sc2p->output_as_audioseminar($email);
+				break;
+			case 'podcast' :
+				$sc2p->output($email);
+				break;
+			case 'campaign' :
+				$sc2p->output_as_campaign($email, $registered_date);
+				break;
+			default:
+				header("Content-Type:text/plain; charset=utf-8");
+				echo "L544 : pass user_can_access({$uid}, {$pid}) \n";
+				exit;
 		}
 	}
  
